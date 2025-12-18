@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -18,15 +19,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-// Database Imports
 import com.technikh.employeeattendancetracking.data.database.AppDatabase
-import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModel
 import com.technikh.employeeattendancetracking.data.database.entities.AttendanceRecord
 import com.technikh.employeeattendancetracking.data.database.entities.DailyAttendance
 import com.technikh.employeeattendancetracking.data.database.entities.DayOfficeHours
-
-// Chart Imports (Vico)
+import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModelV2
 import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.column.columnChart
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
@@ -34,29 +31,28 @@ import com.patrykandpatrick.vico.core.entry.FloatEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReportsDashboard(
+fun ReportsDashboardV2(
     employeeId: String,
-    onBack: () -> Unit // <--- ADDED: Required for navigation
+    onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val database = AppDatabase.getDatabase(context)
 
-    val viewModel: AttendanceViewModel = viewModel(
-        factory = AttendanceViewModel.Factory(
+    // Using V2 ViewModel
+    val viewModel: AttendanceViewModelV2 = viewModel(
+        factory = AttendanceViewModelV2.Factory(
             database.attendanceDao(),
             database.workReasonDao()
         )
     )
 
     LaunchedEffect(employeeId) {
-        viewModel.loadEmployeeState(employeeId)
+        viewModel.loadDashboardData(employeeId)
     }
 
     val dailyReportsState = viewModel.dailyReports.collectAsState(initial = emptyList())
-    val dailyReports = dailyReportsState.value
-    val monthlyReport = emptyList<DayOfficeHours>() // Logic for this can be added later
+    val monthlyReportState = viewModel.monthlyReport.collectAsState(initial = emptyList())
 
-    // --- SCAFFOLD ADDS THE TOP BAR WITH BACK BUTTON ---
     Scaffold(
         topBar = {
             TopAppBar(
@@ -72,13 +68,13 @@ fun ReportsDashboard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues) // Handle top bar padding
+                .padding(paddingValues)
                 .padding(16.dp)
         ) {
             var selectedTab by remember { mutableIntStateOf(0) }
 
             TabRow(selectedTabIndex = selectedTab) {
-                listOf("Daily Report", "Monthly Report").forEachIndexed { index, title ->
+                listOf("Daily Report", "Monthly Chart").forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
@@ -90,15 +86,23 @@ fun ReportsDashboard(
             Spacer(modifier = Modifier.height(16.dp))
 
             when (selectedTab) {
-                0 -> DailyReportView(dailyReports)
-                1 -> MonthlyReportView(monthlyReport)
+                0 -> DailyReportViewV2(dailyReportsState.value)
+                1 -> MonthlyReportViewV2(monthlyReportState.value)
             }
         }
     }
 }
 
+
+
 @Composable
-fun DailyReportView(reports: List<DailyAttendance>) {
+fun DailyReportViewV2(reports: List<DailyAttendance>) {
+    if (reports.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No daily records found.")
+        }
+        return
+    }
     LazyColumn {
         items(reports) { daily ->
             Card(
@@ -109,27 +113,19 @@ fun DailyReportView(reports: List<DailyAttendance>) {
                     Text(text = daily.date, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     daily.records.forEach { record ->
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                             val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                            Text(
-                                text = timeFormat.format(Date(record.timestamp)),
-                                color = if (record.punchType == "IN") Color(0xFF4CAF50) else Color(0xFFF44336)
-                            )
+                            Text(text = timeFormat.format(Date(record.timestamp)),
+                                color = if (record.punchType == "IN") Color(0xFF4CAF50) else Color(0xFFF44336))
                             Text(record.punchType)
                             if (record.reason != null) Text(record.reason, fontStyle = FontStyle.Italic)
                         }
                     }
-                    val totalHours = calculateDailyHoursLocal(daily.records)
+                    val totalHours = calculateDailyHoursLocalV2(daily.records)
                     if (totalHours > 0.0) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Total: ${"%.2f".format(totalHours)} hours",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Text(text = "Total: ${"%.2f".format(totalHours)} hours",
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -138,13 +134,13 @@ fun DailyReportView(reports: List<DailyAttendance>) {
 }
 
 @Composable
-fun MonthlyReportView(monthlyData: List<DayOfficeHours>) {
+fun MonthlyReportViewV2(monthlyData: List<DayOfficeHours>) {
     if (monthlyData.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize().padding(16.dp),
-            contentAlignment = androidx.compose.ui.Alignment.Center
+            contentAlignment = Alignment.Center
         ) {
-            Text("No monthly data available yet.")
+            Text("No chart data. Punch OUT as 'Office Work' to see bars.")
         }
         return
     }
@@ -157,20 +153,27 @@ fun MonthlyReportView(monthlyData: List<DayOfficeHours>) {
     }
 
     Column {
+        Text("Office Hours (Current Month)", fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+
+
         Chart(
             chart = columnChart(),
             chartModelProducer = chartProducer,
-            modifier = Modifier.fillMaxWidth().height(200.dp)
+            modifier = Modifier.fillMaxWidth().height(250.dp)
         )
+
         Spacer(modifier = Modifier.height(16.dp))
+        Divider()
+
         LazyColumn {
             items(monthlyData) { dayData ->
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
                 ) {
                     Text(dayData.day)
-                    Text("${"%.2f".format(dayData.officeHours)} hours")
+                    Text("${"%.2f".format(dayData.officeHours)} hrs", fontWeight = FontWeight.Bold)
                 }
                 Divider()
             }
@@ -178,7 +181,7 @@ fun MonthlyReportView(monthlyData: List<DayOfficeHours>) {
     }
 }
 
-fun calculateDailyHoursLocal(records: List<AttendanceRecord>): Double {
+fun calculateDailyHoursLocalV2(records: List<AttendanceRecord>): Double {
     var totalHours = 0.0
     var lastPunchIn: Long? = null
     records.sortedBy { it.timestamp }.forEach { record ->

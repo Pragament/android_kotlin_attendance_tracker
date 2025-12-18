@@ -1,31 +1,44 @@
-// MainActivity.kt
-class MainActivity : ComponentActivity() {
+package com.technikh.employeeattendancetracking
+
+import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.*
+import androidx.fragment.app.FragmentActivity
+import com.technikh.employeeattendancetracking.ui.screens.attendance.MainAttendanceScreen
+import com.technikh.employeeattendancetracking.ui.screens.login.LoginScreen
+import com.technikh.employeeattendancetracking.ui.screens.reports.ReportsDashboardV2
+
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Initialize database
-        val database = AppDatabase.getDatabase(this)
-
         setContent {
-            AttendanceAppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    // Navigation setup
-                    val navController = rememberNavController()
+            var currentScreen by remember { mutableStateOf("login") }
+            var currentEmployeeId by remember { mutableStateOf("") }
 
-                    NavHost(navController = navController, startDestination = "login") {
-                        composable("login") { /* Login screen */ }
-                        composable("attendance/{employeeId}") { backStackEntry ->
-                            val employeeId = backStackEntry.arguments?.getString("employeeId") ?: ""
-                            MainAttendanceScreen(employeeId = employeeId)
+            when (currentScreen) {
+                "login" -> {
+                    LoginScreen(
+                        onLoginSuccess = { enteredId ->
+                            currentEmployeeId = enteredId
+                            currentScreen = "attendance"
                         }
-                        composable("reports/{employeeId}") { backStackEntry ->
-                            val employeeId = backStackEntry.arguments?.getString("employeeId") ?: ""
-                            ReportsDashboard(employeeId = employeeId)
+                    )
+                }
+                "attendance" -> {
+                    MainAttendanceScreen(
+                        employeeId = currentEmployeeId,
+                        onNavigateToDashboard = {
+                            currentScreen = "reports"
                         }
-                    }
+                    )
+                }
+                "reports" -> {
+                    ReportsDashboardV2(
+                        employeeId = currentEmployeeId,
+                        onBack = {
+                            currentScreen = "attendance"
+                        }
+                    )
                 }
             }
         }

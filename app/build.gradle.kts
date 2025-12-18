@@ -1,17 +1,18 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    id("kotlin-kapt")  // Enable kapt plugin
+    id("org.jetbrains.kotlin.android")
+
+    id("kotlin-kapt")
 }
 
 android {
     namespace = "com.technikh.employeeattendancetracking"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.technikh.employeeattendancetracking"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -27,32 +28,36 @@ android {
             )
         }
     }
+
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
+
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "1.8"
+    }
+
+    // --- MISSING BLOCKS ADDED BELOW ---
+    buildFeatures {
+        compose = true
+    }
+
+    composeOptions {
+        // This version MUST be 1.5.1 to match Kotlin 1.9.0
+        kotlinCompilerExtensionVersion = "1.5.1"
     }
 }
 
-/*dependencies {
-
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-}*/
-
 dependencies {
+    implementation("com.google.android.material:material:1.11.0")
+
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
 
     // Compose
-    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    implementation(platform("androidx.compose:compose-bom:2023.08.00")) // Using stable BOM
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -73,7 +78,15 @@ dependencies {
 
     // Charts
     implementation("com.patrykandpatrick.vico:compose:1.12.0")
+    implementation("com.patrykandpatrick.vico:core:1.12.0")
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    val cameraxVersion = "1.3.1"
+    implementation("androidx.camera:camera-core:${cameraxVersion}")
+    implementation("androidx.camera:camera-camera2:${cameraxVersion}")
+    implementation("androidx.camera:camera-lifecycle:${cameraxVersion}")
+    implementation("androidx.camera:camera-view:${cameraxVersion}")
+    implementation("io.coil-kt:coil-compose:2.5.0")
 }

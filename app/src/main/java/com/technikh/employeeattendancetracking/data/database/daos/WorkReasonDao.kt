@@ -1,6 +1,8 @@
+package com.technikh.employeeattendancetracking.data.database.daos
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import com.technikh.employeeattendancetracking.data.database.entities.OfficeWorkReason
 
 @Dao
 interface WorkReasonDao {

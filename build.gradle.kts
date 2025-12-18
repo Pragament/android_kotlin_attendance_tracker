@@ -1,7 +1,12 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
 plugins {
     alias(libs.plugins.android.application) apply false
-    alias(libs.plugins.kotlin.android) apply false
-    // Make sure kotlin-kapt is available
-    id("org.jetbrains.kotlin.kapt") version "1.9.22" apply false
+
+    // --- DELETE THIS LINE IF IT EXISTS: ---
+    // alias(libs.plugins.kotlin.android) apply false
+
+    // --- KEEP THESE LINES (This forces the version we need): ---
+    id("org.jetbrains.kotlin.android") version "1.9.0" apply false
+    id("org.jetbrains.kotlin.kapt") version "1.9.0" apply false
+
+    id("com.google.devtools.ksp") version "1.9.0-1.0.13" apply false
 }

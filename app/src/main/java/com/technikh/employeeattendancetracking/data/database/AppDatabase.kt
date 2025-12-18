@@ -1,10 +1,19 @@
+package com.technikh.employeeattendancetracking.data.database
+
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.technikh.employeeattendancetracking.data.database.converters.Converters
+import com.technikh.employeeattendancetracking.data.database.daos.AttendanceDao
+import com.technikh.employeeattendancetracking.data.database.daos.EmployeeDao
+import com.technikh.employeeattendancetracking.data.database.daos.WorkReasonDao
+import com.technikh.employeeattendancetracking.data.database.entities.AttendanceRecord
+import com.technikh.employeeattendancetracking.data.database.entities.Employee
+import com.technikh.employeeattendancetracking.data.database.entities.OfficeWorkReason
 
-// AppDatabase.kt
+
 @Database(
     entities = [Employee::class, AttendanceRecord::class, OfficeWorkReason::class],
     version = 1,

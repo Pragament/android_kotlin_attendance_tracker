@@ -6,75 +6,94 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// CORRECT IMPORTS FOR YOUR NEW FOLDER STRUCTURE
+// Database Imports
 import com.technikh.employeeattendancetracking.data.database.daos.AttendanceDao
 import com.technikh.employeeattendancetracking.data.database.daos.WorkReasonDao
 import com.technikh.employeeattendancetracking.data.database.entities.AttendanceRecord
-import com.technikh.employeeattendancetracking.data.database.entities.OfficeWorkReason
 import com.technikh.employeeattendancetracking.data.database.entities.DailyAttendance
+import com.technikh.employeeattendancetracking.data.database.entities.DayOfficeHours
+import com.technikh.employeeattendancetracking.data.database.entities.OfficeWorkReason
 
-class AttendanceViewModel(
+class AttendanceViewModelV2(
     private val attendanceDao: AttendanceDao,
     private val workReasonDao: WorkReasonDao
 ) : ViewModel() {
 
-    // --- UI STATES ---
+    // --- STATES ---
     var showPunchOutDialog by mutableStateOf(false)
 
-    // Holds the "In/Out" status for the Button color
     private val _isPunchedIn = MutableStateFlow(false)
     val isPunchedIn = _isPunchedIn.asStateFlow()
 
-    // Holds the Reports Data (Fixed: Now returns grouped DailyAttendance)
     private val _dailyReports = MutableStateFlow<List<DailyAttendance>>(emptyList())
     val dailyReports = _dailyReports.asStateFlow()
 
-    // --- MAIN LOGIC ---
+    private val _monthlyReport = MutableStateFlow<List<DayOfficeHours>>(emptyList())
+    val monthlyReport = _monthlyReport.asStateFlow()
 
-    // Called when the screen opens to load data
-    fun loadEmployeeState(employeeId: String) {
+    // --- LOAD DATA ---
+    fun loadDashboardData(employeeId: String) {
         viewModelScope.launch {
-            // 1. Check if user is currently punched in
+            // 1. Check Punch Status
             val lastRecord = attendanceDao.getAttendanceByEmployee(employeeId).firstOrNull()
             _isPunchedIn.value = lastRecord?.punchType == "IN"
 
-            // 2. Load and Group the Reports Data
-            attendanceDao.getDailyAttendance(employeeId).collect { records ->
-                // This logic transforms the "Raw List" into "Grouped by Date"
-                val groupedData = records.groupBy { record ->
-                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(record.timestamp))
-                }.map { (date, dayRecords) ->
-                    DailyAttendance(date, dayRecords)
-                }
-                _dailyReports.value = groupedData
+            // 2. Load Daily Data
+            val allRecords = attendanceDao.getAttendanceByEmployee(employeeId)
+            val grouped = allRecords.groupBy { record ->
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(record.timestamp))
+            }.map { (date, records) ->
+                DailyAttendance(date, records)
+            }
+            _dailyReports.value = grouped
+
+            // 3. Load Monthly Data
+            loadMonthlyChartData(employeeId)
+        }
+    }
+
+    private fun loadMonthlyChartData(employeeId: String) {
+        viewModelScope.launch {
+            val currentMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
+            val report = attendanceDao.getMonthlyOfficeHours(employeeId, currentMonth)
+            _monthlyReport.value = report
+        }
+    }
+
+    // --- PUNCH LOGIC (UPDATED FOR SELFIE) ---
+
+    // Updated to accept the selfie path
+    fun onBiometricSuccess(employeeId: String, selfiePath: String?) {
+        viewModelScope.launch {
+            val lastRecord = attendanceDao.getAttendanceByEmployee(employeeId).firstOrNull()
+
+            if (lastRecord?.punchType == "IN") {
+                // If already in, show punch out dialog (Selfie not needed for OUT)
+                showPunchOutDialog = true
+            } else {
+                // If punching IN, save the record with the photo path
+                punchIn(employeeId, selfiePath)
             }
         }
     }
 
-    fun onBiometricSuccess(employeeId: String) {
-        viewModelScope.launch {
-            // Double check state to avoid duplicate punches
-            val lastRecord = attendanceDao.getAttendanceByEmployee(employeeId).firstOrNull()
-
-            if (lastRecord?.punchType == "IN") {
-                showPunchOutDialog = true
-            } else {
-                attendanceDao.insert(AttendanceRecord(
-                    employeeId = employeeId,
-                    punchType = "IN"
-                ))
-                _isPunchedIn.value = true
-            }
-        }
+    private suspend fun punchIn(employeeId: String, selfiePath: String?) {
+        val record = AttendanceRecord(
+            employeeId = employeeId,
+            punchType = "IN",
+            timestamp = System.currentTimeMillis(),
+            selfiePath = selfiePath // <--- SAVING THE PHOTO PATH HERE
+        )
+        attendanceDao.insert(record)
+        _isPunchedIn.value = true
+        loadDashboardData(employeeId) // Refresh UI
     }
 
     fun punchOut(employeeId: String, reason: String, isOfficeWork: Boolean, workReason: String?) {
@@ -82,15 +101,18 @@ class AttendanceViewModel(
             attendanceDao.insert(AttendanceRecord(
                 employeeId = employeeId,
                 punchType = "OUT",
+                timestamp = System.currentTimeMillis(),
                 reason = reason,
                 isOfficeWork = isOfficeWork,
                 workReason = workReason
             ))
-            _isPunchedIn.value = false // Switch button back to "PUNCH IN" (Green)
 
             if (isOfficeWork && !workReason.isNullOrBlank()) {
                 saveNewReason(workReason)
             }
+
+            _isPunchedIn.value = false
+            loadDashboardData(employeeId)
         }
     }
 
@@ -103,21 +125,15 @@ class AttendanceViewModel(
         }
     }
 
-    suspend fun searchWorkReasons(query: String): List<String> {
-        return withContext(Dispatchers.IO) {
-            workReasonDao.searchReasons("%$query%").map { it.reason }
-        }
-    }
-
-
+    // --- FACTORY ---
     class Factory(
         private val attendanceDao: AttendanceDao,
         private val workReasonDao: WorkReasonDao
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(AttendanceViewModel::class.java)) {
+            if (modelClass.isAssignableFrom(AttendanceViewModelV2::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return AttendanceViewModel(attendanceDao, workReasonDao) as T
+                return AttendanceViewModelV2(attendanceDao, workReasonDao) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
