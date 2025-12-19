@@ -1,5 +1,6 @@
-package com.technikh.employeeattendancetracking.ui.screens.reports
+package com.technikh.employeeattendancetracking.ui.screens.dashboard
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,10 +20,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.io.File
+import coil.compose.AsyncImage
 import com.technikh.employeeattendancetracking.data.database.AppDatabase
-import com.technikh.employeeattendancetracking.data.database.entities.AttendanceRecord
 import com.technikh.employeeattendancetracking.data.database.entities.DailyAttendance
 import com.technikh.employeeattendancetracking.data.database.entities.DayOfficeHours
+import com.technikh.employeeattendancetracking.data.database.entities.AttendanceRecord
 import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModelV2
 import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.column.columnChart
@@ -38,11 +41,15 @@ fun ReportsDashboardV2(
     val context = LocalContext.current
     val database = AppDatabase.getDatabase(context)
 
-    // Using V2 ViewModel
+    BackHandler {
+        onBack()
+    }
+
     val viewModel: AttendanceViewModelV2 = viewModel(
         factory = AttendanceViewModelV2.Factory(
             database.attendanceDao(),
-            database.workReasonDao()
+            database.workReasonDao(),
+            database.employeeDao()
         )
     )
 
@@ -55,45 +62,37 @@ fun ReportsDashboardV2(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Attendance Reports") },
-                navigationIcon = {
-                    IconButton(onClick = { onBack() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
+            TopAppBar(title = { Text("Attendance Reports") })
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-        ) {
-            var selectedTab by remember { mutableIntStateOf(0) }
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
 
-            TabRow(selectedTabIndex = selectedTab) {
-                listOf("Daily Report", "Monthly Chart").forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { Text(title) }
-                    )
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                var selectedTab by remember { mutableIntStateOf(0) }
+                TabRow(selectedTabIndex = selectedTab) {
+                    listOf("Daily Report", "Monthly Chart").forEachIndexed { index, title ->
+                        Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                when (selectedTab) {
+                    0 -> DailyReportViewV2(dailyReportsState.value)
+                    1 -> MonthlyReportViewV2(monthlyReportState.value)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            when (selectedTab) {
-                0 -> DailyReportViewV2(dailyReportsState.value)
-                1 -> MonthlyReportViewV2(monthlyReportState.value)
+            FloatingActionButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp),
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
         }
     }
 }
-
-
 
 @Composable
 fun DailyReportViewV2(reports: List<DailyAttendance>) {
@@ -112,20 +111,66 @@ fun DailyReportViewV2(reports: List<DailyAttendance>) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = daily.date, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
+
                     daily.records.forEach { record ->
-                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                            Text(text = timeFormat.format(Date(record.timestamp)),
-                                color = if (record.punchType == "IN") Color(0xFF4CAF50) else Color(0xFFF44336))
-                            Text(record.punchType)
-                            if (record.reason != null) Text(record.reason, fontStyle = FontStyle.Italic)
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                        ) {
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                                Text(
+                                    text = timeFormat.format(Date(record.timestamp)),
+                                    color = if (record.punchType == "IN") Color(0xFF4CAF50) else Color(0xFFF44336),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(record.punchType, fontWeight = FontWeight.SemiBold)
+
+                                // --- FIX: SHOW SPECIFIC WORK REASON ---
+                                if (record.punchType == "OUT") {
+                                    val displayText = if (record.isOfficeWork && !record.workReason.isNullOrBlank()) {
+                                        "${record.reason}: ${record.workReason}" // e.g. "Office Work: Coding"
+                                    } else {
+                                        record.reason // e.g. "Personal"
+                                    }
+
+                                    if (!displayText.isNullOrBlank()) {
+                                        Text(
+                                            text = displayText,
+                                            fontStyle = FontStyle.Italic,
+                                            fontSize = 13.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                            }
+
+
+                            if (record.selfiePath != null) {
+                                Card(
+                                    modifier = Modifier.size(60.dp),
+                                    shape = MaterialTheme.shapes.small,
+                                    elevation = CardDefaults.cardElevation(2.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = File(record.selfiePath),
+                                        contentDescription = "Verification Selfie",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
                         }
+                        Divider()
                     }
                     val totalHours = calculateDailyHoursLocalV2(daily.records)
                     if (totalHours > 0.0) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "Total: ${"%.2f".format(totalHours)} hours",
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Total: ${"%.2f".format(totalHours)} hours",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -136,42 +181,24 @@ fun DailyReportViewV2(reports: List<DailyAttendance>) {
 @Composable
 fun MonthlyReportViewV2(monthlyData: List<DayOfficeHours>) {
     if (monthlyData.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("No chart data. Punch OUT as 'Office Work' to see bars.")
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Text("No chart data yet.")
         }
         return
     }
-
     val chartProducer = remember(monthlyData) {
-        val entries = monthlyData.mapIndexed { index, dayData ->
-            FloatEntry(x = index.toFloat(), y = dayData.officeHours.toFloat())
-        }
+        val entries = monthlyData.mapIndexed { index, dayData -> FloatEntry(x = index.toFloat(), y = dayData.officeHours.toFloat()) }
         ChartEntryModelProducer(entries)
     }
-
     Column {
         Text("Office Hours (Current Month)", fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
-
-
-        Chart(
-            chart = columnChart(),
-            chartModelProducer = chartProducer,
-            modifier = Modifier.fillMaxWidth().height(250.dp)
-        )
-
+        Chart(chart = columnChart(), chartModelProducer = chartProducer, modifier = Modifier.fillMaxWidth().height(250.dp))
         Spacer(modifier = Modifier.height(16.dp))
         Divider()
-
         LazyColumn {
             items(monthlyData) { dayData ->
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp)
-                ) {
+                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                     Text(dayData.day)
                     Text("${"%.2f".format(dayData.officeHours)} hrs", fontWeight = FontWeight.Bold)
                 }

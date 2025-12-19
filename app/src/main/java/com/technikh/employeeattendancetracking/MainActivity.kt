@@ -5,8 +5,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.fragment.app.FragmentActivity
 import com.technikh.employeeattendancetracking.ui.screens.attendance.MainAttendanceScreen
+import com.technikh.employeeattendancetracking.ui.screens.dashboard.ReportsDashboardV2
 import com.technikh.employeeattendancetracking.ui.screens.login.LoginScreen
-import com.technikh.employeeattendancetracking.ui.screens.reports.ReportsDashboardV2
+import com.technikh.employeeattendancetracking.ui.screens.login.RegisterEmployeeScreen
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,23 +22,27 @@ class MainActivity : FragmentActivity() {
                         onLoginSuccess = { enteredId ->
                             currentEmployeeId = enteredId
                             currentScreen = "attendance"
-                        }
+                        },
+                        onNavigateToRegister = { currentScreen = "register" }
+                    )
+                }
+                "register" -> {
+                    RegisterEmployeeScreen(
+                        onRegistered = { currentScreen = "login" }
                     )
                 }
                 "attendance" -> {
                     MainAttendanceScreen(
                         employeeId = currentEmployeeId,
-                        onNavigateToDashboard = {
-                            currentScreen = "reports"
-                        }
+                        onNavigateToDashboard = { currentScreen = "reports" },
+
+                        onNavigateHome = { currentScreen = "login" }
                     )
                 }
                 "reports" -> {
                     ReportsDashboardV2(
                         employeeId = currentEmployeeId,
-                        onBack = {
-                            currentScreen = "attendance"
-                        }
+                        onBack = { currentScreen = "attendance" }
                     )
                 }
             }

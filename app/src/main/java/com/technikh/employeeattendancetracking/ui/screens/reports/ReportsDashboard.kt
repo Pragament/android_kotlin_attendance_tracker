@@ -36,7 +36,7 @@ import com.patrykandpatrick.vico.core.entry.FloatEntry
 @Composable
 fun ReportsDashboard(
     employeeId: String,
-    onBack: () -> Unit // <--- ADDED: Required for navigation
+    onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val database = AppDatabase.getDatabase(context)

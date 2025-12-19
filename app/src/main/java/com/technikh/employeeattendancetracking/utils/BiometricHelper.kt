@@ -17,13 +17,13 @@ fun rememberBiometricPrompt(
 ): BiometricPrompt? {
     val context = LocalContext.current
 
-    // Ensure we are inside an Activity that supports Biometrics
+
     val fragmentActivity = context as? FragmentActivity ?: return null
 
-    // Create the executor
+
     val executor = remember { ContextCompat.getMainExecutor(context) }
 
-    // Create the callback
+
     val callback = remember {
         object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -36,7 +36,6 @@ fun rememberBiometricPrompt(
         }
     }
 
-    // Initialize the prompt
     return remember { BiometricPrompt(fragmentActivity, executor, callback) }
 }
 
