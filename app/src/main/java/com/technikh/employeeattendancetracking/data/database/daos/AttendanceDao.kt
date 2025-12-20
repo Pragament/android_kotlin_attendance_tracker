@@ -6,10 +6,29 @@ import androidx.room.Insert
 import androidx.room.Query
 import com.technikh.employeeattendancetracking.data.database.entities.AttendanceRecord
 import com.technikh.employeeattendancetracking.data.database.entities.DayOfficeHours
+import com.technikh.employeeattendancetracking.data.database.entities.Employee
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AttendanceDao {
+    @Query("SELECT * FROM employees")
+    suspend fun getAllEmployeesList(): List<Employee>
+
+    @Query("SELECT * FROM attendance_records ORDER BY timestamp DESC")
+    suspend fun getAllRecordsList(): List<AttendanceRecord>
+
+    @Query("SELECT * FROM attendance_records WHERE employeeId = :empId ORDER BY timestamp DESC LIMIT 1")
+    fun getLastRecordFlow(empId: String): Flow<AttendanceRecord?>
+
+    @Query("SELECT * FROM attendance_records WHERE employeeId = :empId ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLastRecord(empId: String): AttendanceRecord?
+
+    @Query("SELECT * FROM attendance_records WHERE timestamp >= :startOfDay ORDER BY timestamp DESC")
+    fun getTodayAttendance(startOfDay: Long): Flow<List<AttendanceRecord>>
+
+    @Query("SELECT * FROM attendance_records ORDER BY timestamp DESC")
+    fun getAllRecordsFlow(): Flow<List<AttendanceRecord>>
+
     @Insert
     suspend fun insert(record: AttendanceRecord)
 

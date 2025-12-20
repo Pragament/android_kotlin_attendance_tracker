@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,8 +35,9 @@ import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModelV2
 import com.technikh.employeeattendancetracking.utils.rememberBiometricPrompt
 import com.technikh.employeeattendancetracking.utils.launchBiometric
 import com.technikh.employeeattendancetracking.utils.takePhoto
+import com.technikh.employeeattendancetracking.utils.SettingsManager
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainAttendanceScreen(
     employeeId: String,
@@ -45,9 +49,7 @@ fun MainAttendanceScreen(
     val database = AppDatabase.getDatabase(context)
 
 
-    BackHandler {
-        onNavigateHome()
-    }
+    val settingsManager = remember { SettingsManager(context) }
 
     val viewModel: AttendanceViewModelV2 = viewModel(
         factory = AttendanceViewModelV2.Factory(
@@ -57,17 +59,32 @@ fun MainAttendanceScreen(
         )
     )
 
+    BackHandler { onNavigateHome() }
+
+    val lastRecord by viewModel.getLiveStatus(employeeId).collectAsState(initial = null)
+
+
+    val isPunchedIn = lastRecord?.punchType == "IN"
+
+
+    var employeeName by remember { mutableStateOf("Loading...") }
+    var savedPassword by remember { mutableStateOf("") }
+
     LaunchedEffect(employeeId) {
-        viewModel.loadDashboardData(employeeId)
+        val emp = database.employeeDao().getEmployeeById(employeeId)
+        employeeName = emp?.name ?: employeeId
+        savedPassword = emp?.password ?: ""
     }
 
-    val isPunchedIn by viewModel.isPunchedIn.collectAsState()
-    val employees by viewModel.employees.collectAsState()
-    val employeeName = employees.find { it.employeeId == employeeId }?.name ?: employeeId
 
     var showPunchOutDialog by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var passwordInput by remember { mutableStateOf("") }
+    var pendingAction by remember { mutableStateOf("") }
+
     var tempSelfiePath by remember { mutableStateOf<String?>(null) }
     var isCapturingPhoto by remember { mutableStateOf(false) }
+
 
     var hasCameraPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -86,6 +103,7 @@ fun MainAttendanceScreen(
         }
     }
 
+
     val biometricPrompt = rememberBiometricPrompt(
         onSuccess = {
             isCapturingPhoto = true
@@ -99,7 +117,7 @@ fun MainAttendanceScreen(
                     val path = photoFile.absolutePath
                     tempSelfiePath = path
 
-                    if (isPunchedIn) {
+                    if (pendingAction == "OUT") {
                         showPunchOutDialog = true
                     } else {
                         viewModel.punchIn(employeeId, path)
@@ -118,16 +136,28 @@ fun MainAttendanceScreen(
         }
     )
 
+
+    val startPunchProcess = {
+        if (!hasCameraPermission) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        } else {
+            biometricPrompt?.let { launchBiometric(it) }
+        }
+    }
+
     Scaffold { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Hidden Camera Preview
+
             if (hasCameraPermission) {
+
+                val size = if (settingsManager.showCameraPreview) 150.dp else 1.dp
+                val alpha = if (settingsManager.showCameraPreview) 1f else 0f
+
                 AndroidView(
                     factory = { ctx -> PreviewView(ctx).apply { controller = cameraController } },
-                    modifier = Modifier.size(1.dp).alpha(0f)
+                    modifier = Modifier.size(size).alpha(alpha).align(Alignment.TopCenter)
                 )
             }
-
 
             Column(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -135,16 +165,32 @@ fun MainAttendanceScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(text = employeeName, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text(text = "ID: $employeeId", fontSize = 16.sp, color = Color.Gray)
+
+                Text(
+                    text = "ID: $employeeId",
+                    fontSize = 16.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            Toast.makeText(context, "Live Status: ${if(isPunchedIn) "IN" else "OUT"}", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                )
 
                 Spacer(modifier = Modifier.height(40.dp))
 
+
                 Button(
                     onClick = {
-                        if (!hasCameraPermission) {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        pendingAction = if (isPunchedIn) "OUT" else "IN"
+
+
+                        if (settingsManager.isPasswordFeatureEnabled && savedPassword.isNotBlank()) {
+                            passwordInput = ""
+                            showPasswordDialog = true
                         } else {
-                            biometricPrompt?.let { launchBiometric(it) }
+                            startPunchProcess()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -173,17 +219,43 @@ fun MainAttendanceScreen(
                 }
             }
 
-
             FloatingActionButton(
                 onClick = onNavigateHome,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp),
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
             ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
 
+
+            if (showPasswordDialog) {
+                AlertDialog(
+                    onDismissRequest = { showPasswordDialog = false },
+                    title = { Text("Enter Password") },
+                    text = {
+                        OutlinedTextField(
+                            value = passwordInput,
+                            onValueChange = { passwordInput = it },
+                            label = { Text("User Password") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            if (passwordInput == savedPassword) {
+                                showPasswordDialog = false
+                                startPunchProcess() // Auth Success -> Proceed
+                            } else {
+                                Toast.makeText(context, "Wrong Password", Toast.LENGTH_SHORT).show()
+                            }
+                        }) { Text("Confirm") }
+                    },
+                    dismissButton = {
+                        Button(onClick = { showPasswordDialog = false }) { Text("Cancel") }
+                    }
+                )
+            }
 
             if (showPunchOutDialog) {
                 PunchOutReasonDialog(

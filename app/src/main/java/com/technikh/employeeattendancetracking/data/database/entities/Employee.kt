@@ -9,6 +9,7 @@ data class Employee(
     val id: Int = 0,
     val name: String,
     val employeeId: String,
+    val password: String = "",
     val fingerprintRegistered: Boolean = false,
     val registrationDate: Long = System.currentTimeMillis()
 )
