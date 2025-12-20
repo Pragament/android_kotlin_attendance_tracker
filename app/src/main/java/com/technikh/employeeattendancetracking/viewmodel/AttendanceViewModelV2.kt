@@ -34,19 +34,16 @@ class AttendanceViewModelV2(
     val currentEmployeeName = _currentEmployeeName.asStateFlow()
 
 
-    // --- REPORTING FEATURES ---
+    // --- REPORTING FEATURES (Individual) ---
 
     // 1. The Single Source of Truth for "Selected Time" (Used for both Day and Month views)
     private val _selectedDate = MutableStateFlow(Calendar.getInstance())
 
     // 2. Formatted Strings for UI Headers
-
-    // For Daily View Header: "20 December 2025"
     val currentDateText = _selectedDate.map { cal ->
         SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(cal.time)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
-    // For Monthly View Header: "December 2025"
     val currentMonthText = _selectedDate.map { cal ->
         SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
@@ -63,7 +60,7 @@ class AttendanceViewModelV2(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 5. CSV EXPORT DATA: Gets ALL records for the selected MONTH (so export remains useful)
+    // 5. CSV EXPORT DATA: Gets ALL records for the selected MONTH
     val currentMonthRecords = combine(_allRecords, _selectedDate) { records, cal ->
         val targetMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
         records.filter {
@@ -73,7 +70,6 @@ class AttendanceViewModelV2(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // 6. Compatibility Flow (Keeps old code working if referenced)
-    // This replicates the old 'dailyReports' logic but tied to the new _selectedDate
     val dailyReports = combine(_allRecords, _selectedDate) { records, cal ->
         val selectedMonthStr = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
         val filtered = records.filter {
@@ -90,6 +86,55 @@ class AttendanceViewModelV2(
     val monthlyReport = _monthlyReport.asStateFlow()
 
     private var activeEmployeeId: String? = null
+
+    // --- NEW: GLOBAL REPORTS (Multi-Select Filter) ---
+
+    // 1. All records in the entire database (loaded when Global Screen opens)
+    private val _globalRecords = MutableStateFlow<List<AttendanceRecord>>(emptyList())
+
+    // 2. The IDs currently selected in the filter (Empty = Select All)
+    private val _selectedEmployeeIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedEmployeeIds = _selectedEmployeeIds.asStateFlow()
+
+    fun toggleEmployeeSelection(id: String) {
+        val current = _selectedEmployeeIds.value.toMutableSet()
+        if (current.contains(id)) current.remove(id) else current.add(id)
+        _selectedEmployeeIds.value = current
+    }
+
+    fun selectAllEmployees(allIds: List<String>) {
+        _selectedEmployeeIds.value = allIds.toSet()
+    }
+
+    // 3. GLOBAL DAILY REPORT (Filtered by Date AND Selected Employees)
+    val globalDailyReports = combine(_globalRecords, _selectedDate, _selectedEmployeeIds) { records, cal, selectedIds ->
+        val targetDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+
+        records.filter { record ->
+            val isDateMatch = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(record.timestamp)) == targetDay
+            val isEmpMatch = if (selectedIds.isEmpty()) true else selectedIds.contains(record.employeeId)
+            isDateMatch && isEmpMatch
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // 4. GLOBAL MONTHLY SUMMARY (Aggregated Hours per Employee for the Month)
+    val globalMonthlySummary = combine(_globalRecords, _selectedDate, _selectedEmployeeIds) { records, cal, selectedIds ->
+        val targetMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
+
+        // Filter by Month & Employee
+        val monthlyRecords = records.filter { record ->
+            val isMonthMatch = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(record.timestamp)) == targetMonth
+            val isEmpMatch = if (selectedIds.isEmpty()) true else selectedIds.contains(record.employeeId)
+            isMonthMatch && isEmpMatch
+        }
+
+        // Group by Employee and Calculate Hours
+        monthlyRecords.groupBy { it.employeeId }.map { (empId, empRecords) ->
+            val hours = calculateHoursInternal(empRecords)
+            empId to hours
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
 
     // --- WORK REASONS ---
     private val _workReasonSuggestions = MutableStateFlow<List<String>>(emptyList())
@@ -121,7 +166,19 @@ class AttendanceViewModelV2(
         }
     }
 
-    // --- NAVIGATION ACTIONS ---
+    // --- NEW: Load Global Data ---
+    fun loadGlobalReportData() {
+        viewModelScope.launch {
+            val all = attendanceDao.getAllRecordsList() // Fetch ALL records
+            _globalRecords.value = all
+
+            // FIX: Use .first() on the Flow to get the list without needing a new DAO function
+            val allEmps = employeeDao.getAllEmployees().first()
+
+            _selectedEmployeeIds.value = allEmps.map { it.employeeId }.toSet()
+        }
+    }
+
 
     // Move Day by Day (For Daily Report Tab)
     fun incrementDay(amount: Int) {
@@ -207,6 +264,20 @@ class AttendanceViewModelV2(
     private fun getStartOfDay(): Long {
         val cal = Calendar.getInstance(); cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
         return cal.timeInMillis
+    }
+
+    // Helper logic for hours calculation
+    private fun calculateHoursInternal(records: List<AttendanceRecord>): Double {
+        var totalHours = 0.0
+        var lastPunchIn: Long? = null
+        records.sortedBy { it.timestamp }.forEach { record ->
+            if (record.punchType == "IN") lastPunchIn = record.timestamp
+            else if (record.punchType == "OUT" && lastPunchIn != null) {
+                totalHours += (record.timestamp - lastPunchIn!!) / (1000.0 * 60 * 60)
+                lastPunchIn = null
+            }
+        }
+        return totalHours
     }
 
     class Factory(val ad: AttendanceDao, val wd: WorkReasonDao, val ed: EmployeeDao) : ViewModelProvider.Factory {

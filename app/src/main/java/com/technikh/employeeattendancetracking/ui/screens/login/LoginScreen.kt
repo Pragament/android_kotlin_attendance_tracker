@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search // <--- Search Icon
 import androidx.compose.material.icons.filled.Settings
@@ -34,7 +35,8 @@ import kotlinx.coroutines.launch // <--- For Export Coroutine
 fun LoginScreen(
     onLoginSuccess: (String) -> Unit,
     onNavigateToRegister: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToGlobalReports: () -> Unit
 ) {
     val context = LocalContext.current
     val database = AppDatabase.getDatabase(context)
@@ -75,6 +77,10 @@ fun LoginScreen(
             TopAppBar(
                 title = { Text("Attendance Home") },
                 actions = {
+                    IconButton(onClick = onNavigateToGlobalReports) {
+                        Icon(Icons.Default.List, contentDescription = "View Reports")
+                    }
+
                     // --- GLOBAL EXPORT BUTTON ---
                     IconButton(onClick = {
                         scope.launch {

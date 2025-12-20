@@ -9,6 +9,7 @@ import com.technikh.employeeattendancetracking.ui.screens.dashboard.ReportsDashb
 import com.technikh.employeeattendancetracking.ui.screens.login.LoginScreen
 import com.technikh.employeeattendancetracking.ui.screens.login.RegisterEmployeeScreen
 import com.technikh.employeeattendancetracking.ui.screens.settings.SettingsScreen
+import com.technikh.employeeattendancetracking.ui.screens.reports.GlobalReportsScreen // <--- IMPORT THIS
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,14 +26,16 @@ class MainActivity : FragmentActivity() {
                             currentScreen = "attendance"
                         },
                         onNavigateToRegister = { currentScreen = "register" },
-                        // --- CONNECT THE BUTTON HERE ---
-                        onNavigateToSettings = { currentScreen = "settings" }
+                        onNavigateToSettings = { currentScreen = "settings" },
+                        // --- NEW: CONNECT GLOBAL REPORTS ---
+                        onNavigateToGlobalReports = { currentScreen = "global_reports" }
                     )
                 }
-                // ... rest of the code remains the same ...
+
                 "register" -> {
                     RegisterEmployeeScreen(onRegistered = { currentScreen = "login" })
                 }
+
                 "attendance" -> {
                     MainAttendanceScreen(
                         employeeId = currentEmployeeId,
@@ -40,14 +43,23 @@ class MainActivity : FragmentActivity() {
                         onNavigateHome = { currentScreen = "login" }
                     )
                 }
+
                 "reports" -> {
                     ReportsDashboardV2(
                         employeeId = currentEmployeeId,
                         onBack = { currentScreen = "attendance" }
                     )
                 }
+
                 "settings" -> {
                     SettingsScreen(onBack = { currentScreen = "login" })
+                }
+
+                // --- NEW SCREEN CASE ---
+                "global_reports" -> {
+                    GlobalReportsScreen(
+                        onBack = { currentScreen = "login" }
+                    )
                 }
             }
         }
