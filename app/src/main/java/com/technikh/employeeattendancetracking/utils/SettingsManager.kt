@@ -21,4 +21,8 @@ class SettingsManager(context: Context) {
     var maxHomeEmployees: Int
         get() = prefs.getInt("max_home_employees", 5)
         set(value) = prefs.edit().putInt("max_home_employees", value).apply()
+
+    var allowSelfCorrection: Boolean
+        get() = prefs.getBoolean("allow_self_correction", false)
+        set(value) = prefs.edit().putBoolean("allow_self_correction", value).apply()
 }

@@ -9,11 +9,11 @@ object AttendanceUtils {
         var totalHours = 0.0
         var lastPunchIn: Long? = null
 
-        records.sortedBy { it.timestamp }.forEach { record ->
+        records.sortedBy { it.employeeTimeMillis }.forEach { record ->
             when (record.punchType) {
-                "IN" -> lastPunchIn = record.timestamp
+                "IN" -> lastPunchIn = record.employeeTimeMillis
                 "OUT" -> lastPunchIn?.let { punchIn ->
-                    val duration = (record.timestamp - punchIn) / (1000.0 * 60 * 60)
+                    val duration = (record.employeeTimeMillis - punchIn) / (1000.0 * 60 * 60)
                     if (record.isOfficeWork) {
                         totalHours += duration
                     }
@@ -27,11 +27,11 @@ object AttendanceUtils {
 
     fun groupRecordsByDate(records: List<AttendanceRecord>): List<DailyAttendance> {
         return records.groupBy {
-            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.timestamp))
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.employeeTimeMillis))
         }.map { (date, dayRecords) ->
             DailyAttendance(
                 date = date,
-                records = dayRecords.sortedByDescending { it.timestamp }
+                records = dayRecords.sortedByDescending { it.employeeTimeMillis }
             )
         }.sortedByDescending { it.date }
     }

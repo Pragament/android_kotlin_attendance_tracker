@@ -53,6 +53,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         var isPassEnabled by remember { mutableStateOf(settingsManager.isPasswordFeatureEnabled) }
         var isPreviewEnabled by remember { mutableStateOf(settingsManager.showCameraPreview) }
+        var allowSelfCorrection by remember { mutableStateOf(settingsManager.allowSelfCorrection) }
         var maxEmp by remember { mutableStateOf(settingsManager.maxHomeEmployees.toString()) }
         var newAdminPass by remember { mutableStateOf("") }
 
@@ -80,6 +81,15 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             Divider(Modifier.padding(vertical = 8.dp))
 
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Allow Employee Self-Correction")
+                Switch(checked = allowSelfCorrection, onCheckedChange = {
+                    allowSelfCorrection = it
+                    settingsManager.allowSelfCorrection = it
+                })
+            }
+            Divider(Modifier.padding(vertical = 8.dp))
 
             OutlinedTextField(
                 value = maxEmp,

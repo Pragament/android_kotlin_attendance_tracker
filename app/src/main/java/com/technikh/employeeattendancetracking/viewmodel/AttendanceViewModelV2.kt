@@ -55,7 +55,7 @@ class AttendanceViewModelV2(
     val currentDayRecords = combine(_allRecords, _selectedDate) { records, cal ->
         val targetDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
         records.filter {
-            val recordDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.timestamp))
+            val recordDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.employeeTimeMillis))
             recordDay == targetDay
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -64,7 +64,7 @@ class AttendanceViewModelV2(
     val currentMonthRecords = combine(_allRecords, _selectedDate) { records, cal ->
         val targetMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
         records.filter {
-            val recordMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(it.timestamp))
+            val recordMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(it.employeeTimeMillis))
             recordMonth == targetMonth
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -73,11 +73,11 @@ class AttendanceViewModelV2(
     val dailyReports = combine(_allRecords, _selectedDate) { records, cal ->
         val selectedMonthStr = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
         val filtered = records.filter {
-            val recordMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(it.timestamp))
+            val recordMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(it.employeeTimeMillis))
             recordMonth == selectedMonthStr
         }
         filtered.groupBy {
-            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.timestamp))
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.employeeTimeMillis))
         }.map { (date, dailyRecs) -> DailyAttendance(date, dailyRecs) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -111,7 +111,8 @@ class AttendanceViewModelV2(
         val targetDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
 
         records.filter { record ->
-            val isDateMatch = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(record.timestamp)) == targetDay
+            val isDateMatch = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(record.employeeTimeMillis
+            )) == targetDay
             val isEmpMatch = if (selectedIds.isEmpty()) true else selectedIds.contains(record.employeeId)
             isDateMatch && isEmpMatch
         }
@@ -123,7 +124,8 @@ class AttendanceViewModelV2(
 
         // Filter by Month & Employee
         val monthlyRecords = records.filter { record ->
-            val isMonthMatch = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(record.timestamp)) == targetMonth
+            val isMonthMatch = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(record.employeeTimeMillis
+            )) == targetMonth
             val isEmpMatch = if (selectedIds.isEmpty()) true else selectedIds.contains(record.employeeId)
             isMonthMatch && isEmpMatch
         }
@@ -231,17 +233,25 @@ class AttendanceViewModelV2(
         return attendanceDao.getLastRecordFlow(employeeId)
     }
 
-    fun punchIn(employeeId: String, selfiePath: String?) {
+    fun punchIn(employeeId: String, selfiePath: String?, systemTimeMillis: Long, employeeTimeMillis: Long) {
         viewModelScope.launch {
-            attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "IN", timestamp = System.currentTimeMillis(), selfiePath = selfiePath))
+            val normalizedSystemTime = normalizeToMinute(systemTimeMillis)
+            val normalizedEmployeeTime = normalizeToMinute(employeeTimeMillis)
+            val isManuallyEdited = normalizedSystemTime != normalizedEmployeeTime
+
+            attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "IN", systemTimeMillis = systemTimeMillis, employeeTimeMillis = employeeTimeMillis, isManuallyEdited = isManuallyEdited, selfiePath = selfiePath))
             _isPunchedIn.value = true
             loadDashboardData(employeeId)
         }
     }
 
-    fun punchOut(employeeId: String, reason: String, isOfficeWork: Boolean, workReason: String?, selfiePath: String?) {
+    fun punchOut(employeeId: String, reason: String, isOfficeWork: Boolean, workReason: String?, systemTimeMillis: Long, employeeTimeMillis: Long, selfiePath: String?) {
         viewModelScope.launch {
-            attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "OUT", timestamp = System.currentTimeMillis(), reason = reason, isOfficeWork = isOfficeWork, workReason = workReason, selfiePath = selfiePath))
+            val normalizedSystemTime = normalizeToMinute(systemTimeMillis)
+            val normalizedEmployeeTime = normalizeToMinute(employeeTimeMillis)
+            val isManuallyEdited = normalizedSystemTime != normalizedEmployeeTime
+
+            attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "OUT", systemTimeMillis = systemTimeMillis, employeeTimeMillis = employeeTimeMillis, isManuallyEdited = isManuallyEdited, reason = reason, isOfficeWork = isOfficeWork, workReason = workReason, selfiePath = selfiePath))
             if (isOfficeWork && !workReason.isNullOrBlank()) saveNewReason(workReason)
             _isPunchedIn.value = false
             loadDashboardData(employeeId)
@@ -253,6 +263,13 @@ class AttendanceViewModelV2(
             if (query.isBlank()) _workReasonSuggestions.value = emptyList()
             else _workReasonSuggestions.value = workReasonDao.searchReasons("%$query%").map { it.reason }
         }
+    }
+
+    private fun normalizeToMinute(timeMillis: Long): Long {
+        val cal = Calendar.getInstance().apply { timeInMillis = timeMillis }
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 
     private suspend fun saveNewReason(reasonText: String) {
@@ -270,10 +287,10 @@ class AttendanceViewModelV2(
     private fun calculateHoursInternal(records: List<AttendanceRecord>): Double {
         var totalHours = 0.0
         var lastPunchIn: Long? = null
-        records.sortedBy { it.timestamp }.forEach { record ->
-            if (record.punchType == "IN") lastPunchIn = record.timestamp
+        records.sortedBy { it.employeeTimeMillis }.forEach { record ->
+            if (record.punchType == "IN") lastPunchIn = record.employeeTimeMillis
             else if (record.punchType == "OUT" && lastPunchIn != null) {
-                totalHours += (record.timestamp - lastPunchIn!!) / (1000.0 * 60 * 60)
+                totalHours += (record.employeeTimeMillis - lastPunchIn!!) / (1000.0 * 60 * 60)
                 lastPunchIn = null
             }
         }

@@ -9,7 +9,11 @@ data class AttendanceRecord(
     val id: Int = 0,
     val employeeId: String,
     val punchType: String, // "IN" or "OUT"
-    val timestamp: Long = System.currentTimeMillis(),
+
+    val systemTimeMillis: Long = System.currentTimeMillis(),
+    val employeeTimeMillis: Long = systemTimeMillis,
+    val isManuallyEdited: Boolean = false,
+
     val reason: String? = null,
     val workReason: String? = null,
     val isOfficeWork: Boolean = false,
