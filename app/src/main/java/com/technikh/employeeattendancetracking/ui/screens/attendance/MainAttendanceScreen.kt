@@ -37,6 +37,10 @@ import com.technikh.employeeattendancetracking.utils.launchBiometric
 import com.technikh.employeeattendancetracking.utils.takePhoto
 import com.technikh.employeeattendancetracking.utils.SettingsManager
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import java.util.Calendar
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainAttendanceScreen(
@@ -89,6 +93,10 @@ fun MainAttendanceScreen(
     var hasCameraPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
+
+    val systemTimeMillis = remember { System.currentTimeMillis() }
+    var selectedTimeMillis by remember { mutableStateOf(systemTimeMillis) }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted -> hasCameraPermission = granted }
@@ -120,7 +128,12 @@ fun MainAttendanceScreen(
                     if (pendingAction == "OUT") {
                         showPunchOutDialog = true
                     } else {
-                        viewModel.punchIn(employeeId, path)
+                        viewModel.punchIn(
+                            employeeId = employeeId,
+                            systemTimeMillis = System.currentTimeMillis(),
+                            employeeTimeMillis = selectedTimeMillis,
+                            selfiePath = path
+                        )
                         Toast.makeText(context, "Punch In Successful!", Toast.LENGTH_SHORT).show()
                         onNavigateHome()
                     }
@@ -142,6 +155,41 @@ fun MainAttendanceScreen(
             permissionLauncher.launch(Manifest.permission.CAMERA)
         } else {
             biometricPrompt?.let { launchBiometric(it) }
+        }
+    }
+
+    fun openDateTimePicker(onTimeSelected: (Long) -> Unit) {
+        val calendar = Calendar.getInstance()
+        val now = Calendar.getInstance()
+        val datePicker = DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                TimePickerDialog(
+                    context,
+                    { _, hour, minute ->
+                        calendar.set(year, month, dayOfMonth, hour, minute)
+                        onTimeSelected(calendar.timeInMillis)
+                    },
+                    calendar.get(Calendar.HOUR_OF_DAY),
+                    calendar.get(Calendar.MINUTE),
+                    true
+                ).show()
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+        datePicker.datePicker.maxDate = now.timeInMillis
+
+        datePicker.show()
+    }
+
+    fun continuePunchAfterDateSelection() {
+        if (settingsManager.isPasswordFeatureEnabled && savedPassword.isNotBlank()) {
+            passwordInput = ""
+            showPasswordDialog = true
+        } else {
+            startPunchProcess()
         }
     }
 
@@ -185,12 +233,14 @@ fun MainAttendanceScreen(
                     onClick = {
                         pendingAction = if (isPunchedIn) "OUT" else "IN"
 
-
-                        if (settingsManager.isPasswordFeatureEnabled && savedPassword.isNotBlank()) {
-                            passwordInput = ""
-                            showPasswordDialog = true
+                        if (settingsManager.allowSelfCorrection) {
+                            openDateTimePicker { pickedMillis ->
+                                selectedTimeMillis = pickedMillis
+                                continuePunchAfterDateSelection()
+                            }
                         } else {
-                            startPunchProcess()
+                            selectedTimeMillis = System.currentTimeMillis()
+                            continuePunchAfterDateSelection()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -261,7 +311,7 @@ fun MainAttendanceScreen(
                 PunchOutReasonDialog(
                     onDismiss = { showPunchOutDialog = false },
                     onConfirm = { reason, isOffice, workReason ->
-                        viewModel.punchOut(employeeId, reason, isOffice, workReason, tempSelfiePath)
+                        viewModel.punchOut(employeeId, reason, isOffice, workReason, systemTimeMillis = System.currentTimeMillis(), employeeTimeMillis = selectedTimeMillis, tempSelfiePath)
                         showPunchOutDialog = false
                         Toast.makeText(context, "Punch Out Successful!", Toast.LENGTH_SHORT).show()
                         onNavigateHome()

@@ -225,19 +225,36 @@ fun GlobalReportsScreen(
 
 @Composable
 fun GlobalLogItem(record: AttendanceRecord, empName: String) {
-    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.timestamp))
-    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp), elevation = CardDefaults.cardElevation(2.dp)) {
+    val timeFormat = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
+    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(empName, fontWeight = FontWeight.Bold)
-                Row {
-                    Text(record.punchType, color = if(record.punchType == "IN") Color(0xFF2E7D32) else Color(0xFFC62828), fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp))
-                    Text(time)
+                Text(
+                    text = "Recorded on ${dateFormat.format(Date(record.systemTimeMillis))} at ${timeFormat.format(Date(record.systemTimeMillis))}",
+                    color = if (record.punchType == "IN") Color(0xFF2E7D32) else Color(0xFFC62828),
+                    fontWeight = FontWeight.Bold
+                )
+                if (record.isManuallyEdited) {
+                    Text(
+                        "Recorded at ${timeFormat.format(Date(record.systemTimeMillis))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
                 }
             }
+
             if (record.punchType == "OUT" && record.reason != null) {
-                Text(record.reason, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic)
+                Text(
+                    record.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = FontStyle.Italic
+                )
             }
         }
     }

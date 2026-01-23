@@ -114,10 +114,23 @@ fun DailyReportView(reports: List<DailyAttendance>) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                            val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
                             Text(
-                                text = timeFormat.format(Date(record.timestamp)),
+                                text = timeFormat.format(Date(record.employeeTimeMillis)),
                                 color = if (record.punchType == "IN") Color(0xFF4CAF50) else Color(0xFFF44336)
                             )
+                            if (record.isManuallyEdited) {
+                                Text(
+                                    text = "Recorded on ${dateFormat.format(Date(record.systemTimeMillis))} at ${timeFormat.format(Date(record.systemTimeMillis))}",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                                Text(
+                                    text = "Self-corrected",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                             Text(record.punchType)
                             if (record.reason != null) Text(record.reason, fontStyle = FontStyle.Italic)
                         }
@@ -181,10 +194,10 @@ fun MonthlyReportView(monthlyData: List<DayOfficeHours>) {
 fun calculateDailyHoursLocal(records: List<AttendanceRecord>): Double {
     var totalHours = 0.0
     var lastPunchIn: Long? = null
-    records.sortedBy { it.timestamp }.forEach { record ->
-        if (record.punchType == "IN") lastPunchIn = record.timestamp
+    records.sortedBy { it.employeeTimeMillis }.forEach { record ->
+        if (record.punchType == "IN") lastPunchIn = record.employeeTimeMillis
         else if (record.punchType == "OUT" && lastPunchIn != null) {
-            totalHours += (record.timestamp - lastPunchIn!!) / (1000.0 * 60 * 60)
+            totalHours += (record.employeeTimeMillis - lastPunchIn!!) / (1000.0 * 60 * 60)
             lastPunchIn = null
         }
     }

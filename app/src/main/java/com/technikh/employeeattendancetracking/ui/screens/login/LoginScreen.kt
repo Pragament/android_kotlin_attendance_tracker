@@ -196,7 +196,7 @@ fun LoginScreen(
 
                 items(timeline) { record ->
                     val empName = employees.find { it.employeeId == record.employeeId }?.name ?: "Unknown"
-                    val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
+                    val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.systemTimeMillis))
                     val color = if (record.punchType == "IN") Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
 
                     Card(

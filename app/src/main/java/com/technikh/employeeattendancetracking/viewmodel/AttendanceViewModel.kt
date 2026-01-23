@@ -51,7 +51,7 @@ class AttendanceViewModel(
             attendanceDao.getDailyAttendance(employeeId).collect { records ->
                 // This logic transforms the "Raw List" into "Grouped by Date"
                 val groupedData = records.groupBy { record ->
-                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(record.timestamp))
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(record.systemTimeMillis))
                 }.map { (date, dayRecords) ->
                     DailyAttendance(date, dayRecords)
                 }

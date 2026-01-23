@@ -35,8 +35,8 @@ object CsvUtils {
             val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
             records.forEach { record ->
-                val date = dateFormat.format(Date(record.timestamp))
-                val time = timeFormat.format(Date(record.timestamp))
+                val date = dateFormat.format(Date(record.employeeTimeMillis))
+                val time = timeFormat.format(Date(record.employeeTimeMillis))
 
                 val cleanReason = record.reason?.replace(",", " ") ?: ""
                 val cleanWorkReason = record.workReason?.replace(",", " ") ?: ""
