@@ -156,15 +156,28 @@ class AttendanceViewModel(
                 } else {
                     android.util.Log.d("AttendanceVM", "Attempting to connect to Supabase...")
                     try {
-                        client.from("employees").select { limit(1) }
+                        // Try to query any table - we don't care about result, just connectivity
+                        client.from("attendance").select { limit(1) }
                         android.util.Log.d("AttendanceVM", "Connection successful!")
                         _connectionStatus.value = "Online (WiFi Mode)"
                         _isOnline.value = true
-                    } catch (e: io.github.jan.supabase.exceptions.NotFoundRestException) {
-                        // Table not found means server IS reachable, just table doesn't exist
-                        android.util.Log.d("AttendanceVM", "Server reachable but table not found - treating as connected")
+                    } catch (e: io.github.jan.supabase.exceptions.RestException) {
+                        // ANY RestException means server IS reachable (just API issues like table not found, auth error, etc.)
+                        android.util.Log.d("AttendanceVM", "Server reachable (RestException: ${e.message}) - treating as connected")
                         _connectionStatus.value = "Online (WiFi Mode)"
                         _isOnline.value = true
+                    } catch (e: io.ktor.client.plugins.HttpRequestTimeoutException) {
+                        android.util.Log.e("AttendanceVM", "Connection timeout", e)
+                        _connectionStatus.value = "Offline: Timeout"
+                        _isOnline.value = false
+                    } catch (e: java.net.ConnectException) {
+                        android.util.Log.e("AttendanceVM", "Connection refused", e)
+                        _connectionStatus.value = "Offline: Connection Refused"
+                        _isOnline.value = false
+                    } catch (e: java.net.UnknownHostException) {
+                        android.util.Log.e("AttendanceVM", "Unknown host", e)
+                        _connectionStatus.value = "Offline: Unknown Host"
+                        _isOnline.value = false
                     }
                 }
             } catch (e: Exception) {

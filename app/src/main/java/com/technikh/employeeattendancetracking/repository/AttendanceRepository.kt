@@ -75,7 +75,6 @@ class AttendanceRepository(
             null
         }
     }
-
     /**
      * Sync punch record to Supabase with proper mapping to existing table structure.
      * - For PUNCH IN: Creates new row with employee_id, punch_in_time, and image_url
