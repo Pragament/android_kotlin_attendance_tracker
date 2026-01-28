@@ -10,8 +10,10 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -32,6 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 import com.technikh.employeeattendancetracking.data.database.AppDatabase
 import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModelV2
+import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModel
 import com.technikh.employeeattendancetracking.utils.rememberBiometricPrompt
 import com.technikh.employeeattendancetracking.utils.launchBiometric
 import com.technikh.employeeattendancetracking.utils.takePhoto
@@ -45,12 +48,17 @@ import java.util.Calendar
 @Composable
 fun MainAttendanceScreen(
     employeeId: String,
+    viewModel: AttendanceViewModel,
     onNavigateToDashboard: () -> Unit,
     onNavigateHome: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val database = AppDatabase.getDatabase(context)
+
+    // Connection status from the main ViewModel
+    val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
 
 
     val settingsManager = remember { SettingsManager(context) }
@@ -204,6 +212,26 @@ fun MainAttendanceScreen(
                 AndroidView(
                     factory = { ctx -> PreviewView(ctx).apply { controller = cameraController } },
                     modifier = Modifier.size(size).alpha(alpha).align(Alignment.TopCenter)
+                )
+            }
+
+            // --- CONNECTION STATUS INDICATOR ---
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .background(
+                        color = if (isOnline) Color(0xFF4CAF50) else Color(0xFFE53935),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isOnline) "● Online" else "● Offline",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
 

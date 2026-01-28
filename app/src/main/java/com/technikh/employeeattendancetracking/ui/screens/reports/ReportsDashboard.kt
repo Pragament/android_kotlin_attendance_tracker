@@ -21,6 +21,8 @@ import java.util.Locale
 
 // Database Imports
 import com.technikh.employeeattendancetracking.data.database.AppDatabase
+import com.technikh.employeeattendancetracking.data.database.AppPreferences
+import com.technikh.employeeattendancetracking.repository.AttendanceRepository
 import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModel
 import com.technikh.employeeattendancetracking.data.database.entities.AttendanceRecord
 import com.technikh.employeeattendancetracking.data.database.entities.DailyAttendance
@@ -40,12 +42,13 @@ fun ReportsDashboard(
 ) {
     val context = LocalContext.current
     val database = AppDatabase.getDatabase(context)
+    val preferences = remember { AppPreferences(context) }
+    val repository = remember {
+        AttendanceRepository(database.attendanceDao(), database.workReasonDao(), null)
+    }
 
     val viewModel: AttendanceViewModel = viewModel(
-        factory = AttendanceViewModel.Factory(
-            database.attendanceDao(),
-            database.workReasonDao()
-        )
+        factory = AttendanceViewModel.Factory(repository, preferences)
     )
 
     LaunchedEffect(employeeId) {

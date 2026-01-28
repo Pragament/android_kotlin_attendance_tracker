@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     id("org.jetbrains.kotlin.android")
-
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.0"
     id("kotlin-kapt")
 }
 
@@ -30,12 +30,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 
     // --- MISSING BLOCKS ADDED BELOW ---
@@ -89,4 +89,12 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:${cameraxVersion}")
     implementation("androidx.camera:camera-view:${cameraxVersion}")
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Supabase (Cloud Sync)
+    implementation("io.github.jan-tennert.supabase:postgrest-kt:2.3.0")
+    implementation("io.github.jan-tennert.supabase:storage-kt:2.3.0")
+    implementation("io.ktor:ktor-client-okhttp:2.3.0")
+    
+    // Kotlin Serialization (Required for Supabase)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 }
