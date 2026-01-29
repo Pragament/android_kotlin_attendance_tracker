@@ -63,16 +63,22 @@ fun MainAttendanceScreen(
 
     val settingsManager = remember { SettingsManager(context) }
 
-    // Create repository with Supabase client from parent viewModel
-    val repository = remember(viewModel.supabaseClient) {
+    // Create repository without Supabase client initially
+    val repository = remember {
         com.technikh.employeeattendancetracking.repository.AttendanceRepository(
             database.attendanceDao(),
             database.workReasonDao(),
-            viewModel.supabaseClient
+            null  // Will be updated by LaunchedEffect
         )
     }
+    
+    // Keep repository's supabase client in sync with parent viewModel
+    LaunchedEffect(viewModel.supabaseClient) {
+        repository.supabase = viewModel.supabaseClient
+        android.util.Log.d("MainAttendance", "Updated repository.supabase = ${viewModel.supabaseClient != null}")
+    }
 
-    val viewModel: AttendanceViewModelV2 = viewModel(
+    val viewModelV2: AttendanceViewModelV2 = viewModel(
         factory = AttendanceViewModelV2.Factory(
             database.attendanceDao(),
             database.workReasonDao(),
@@ -83,7 +89,7 @@ fun MainAttendanceScreen(
 
     BackHandler { onNavigateHome() }
 
-    val lastRecord by viewModel.getLiveStatus(employeeId).collectAsState(initial = null)
+    val lastRecord by viewModelV2.getLiveStatus(employeeId).collectAsState(initial = null)
 
 
     val isPunchedIn = lastRecord?.punchType == "IN"
@@ -146,7 +152,7 @@ fun MainAttendanceScreen(
                     if (pendingAction == "OUT") {
                         showPunchOutDialog = true
                     } else {
-                        viewModel.punchIn(
+                        viewModelV2.punchIn(
                             employeeId = employeeId,
                             systemTimeMillis = System.currentTimeMillis(),
                             employeeTimeMillis = selectedTimeMillis,
@@ -349,7 +355,7 @@ fun MainAttendanceScreen(
                 PunchOutReasonDialog(
                     onDismiss = { showPunchOutDialog = false },
                     onConfirm = { reason, isOffice, workReason ->
-                        viewModel.punchOut(employeeId, reason, isOffice, workReason, systemTimeMillis = System.currentTimeMillis(), employeeTimeMillis = selectedTimeMillis, tempSelfiePath)
+                        viewModelV2.punchOut(employeeId, reason, isOffice, workReason, systemTimeMillis = System.currentTimeMillis(), employeeTimeMillis = selectedTimeMillis, tempSelfiePath)
                         showPunchOutDialog = false
                         Toast.makeText(context, "Punch Out Successful!", Toast.LENGTH_SHORT).show()
                         onNavigateHome()
