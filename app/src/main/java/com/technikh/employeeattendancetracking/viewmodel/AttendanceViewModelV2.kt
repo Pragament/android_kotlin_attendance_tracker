@@ -15,8 +15,15 @@ class AttendanceViewModelV2(
     private val attendanceDao: AttendanceDao,
     private val workReasonDao: WorkReasonDao,
     private val employeeDao: EmployeeDao,
-    private val repository: AttendanceRepository? = null  // Optional for Supabase sync
+    initialRepository: AttendanceRepository? = null  // Optional for Supabase sync - can be updated later
 ) : ViewModel() {
+
+    // Mutable repository field - can be set after construction
+    var repository: AttendanceRepository? = initialRepository
+        set(value) {
+            field = value
+            android.util.Log.d("V2-VM", "Repository updated: ${value != null}")
+        }
 
     // --- HOME SCREEN FEATURES ---
 
@@ -236,15 +243,23 @@ class AttendanceViewModelV2(
     }
 
     fun punchIn(employeeId: String, selfiePath: String?, systemTimeMillis: Long, employeeTimeMillis: Long) {
+        android.util.Log.d("V2-PUNCH", "punchIn called for $employeeId, selfiePath=$selfiePath")
         viewModelScope.launch {
             val normalizedSystemTime = normalizeToMinute(systemTimeMillis)
             val normalizedEmployeeTime = normalizeToMinute(employeeTimeMillis)
             val isManuallyEdited = normalizedSystemTime != normalizedEmployeeTime
 
             attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "IN", systemTimeMillis = systemTimeMillis, employeeTimeMillis = employeeTimeMillis, isManuallyEdited = isManuallyEdited, selfiePath = selfiePath))
+            android.util.Log.d("V2-PUNCH", "Local DB insert done. Repository is null: ${repository == null}")
             
             // Sync to Supabase if repository is available
-            repository?.syncAttendanceToSupabase(employeeId, "IN", employeeTimeMillis, selfiePath)
+            repository?.let { repo ->
+                android.util.Log.d("V2-PUNCH", "Calling syncAttendanceToSupabase...")
+                repo.syncAttendanceToSupabase(employeeId, "IN", employeeTimeMillis, selfiePath)
+                android.util.Log.d("V2-PUNCH", "syncAttendanceToSupabase completed")
+            } ?: run {
+                android.util.Log.w("V2-PUNCH", "Repository is NULL - cannot sync to Supabase!")
+            }
             
             _isPunchedIn.value = true
             loadDashboardData(employeeId)

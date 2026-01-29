@@ -86,6 +86,12 @@ fun MainAttendanceScreen(
             repository  // Pass repository for Supabase sync
         )
     )
+    
+    // CRITICAL: Update the ViewModel's repository field in case it was cached from another screen
+    LaunchedEffect(repository) {
+        viewModelV2.repository = repository
+        android.util.Log.d("MainAttendance", "Set viewModelV2.repository = ${repository != null}")
+    }
 
     BackHandler { onNavigateHome() }
 
