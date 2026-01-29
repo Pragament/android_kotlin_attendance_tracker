@@ -9,11 +9,13 @@ import java.text.SimpleDateFormat
 import java.util.*
 import com.technikh.employeeattendancetracking.data.database.daos.*
 import com.technikh.employeeattendancetracking.data.database.entities.*
+import com.technikh.employeeattendancetracking.repository.AttendanceRepository
 
 class AttendanceViewModelV2(
     private val attendanceDao: AttendanceDao,
     private val workReasonDao: WorkReasonDao,
-    private val employeeDao: EmployeeDao
+    private val employeeDao: EmployeeDao,
+    private val repository: AttendanceRepository? = null  // Optional for Supabase sync
 ) : ViewModel() {
 
     // --- HOME SCREEN FEATURES ---
@@ -240,6 +242,10 @@ class AttendanceViewModelV2(
             val isManuallyEdited = normalizedSystemTime != normalizedEmployeeTime
 
             attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "IN", systemTimeMillis = systemTimeMillis, employeeTimeMillis = employeeTimeMillis, isManuallyEdited = isManuallyEdited, selfiePath = selfiePath))
+            
+            // Sync to Supabase if repository is available
+            repository?.syncAttendanceToSupabase(employeeId, "IN", employeeTimeMillis, selfiePath)
+            
             _isPunchedIn.value = true
             loadDashboardData(employeeId)
         }
@@ -252,6 +258,10 @@ class AttendanceViewModelV2(
             val isManuallyEdited = normalizedSystemTime != normalizedEmployeeTime
 
             attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "OUT", systemTimeMillis = systemTimeMillis, employeeTimeMillis = employeeTimeMillis, isManuallyEdited = isManuallyEdited, reason = reason, isOfficeWork = isOfficeWork, workReason = workReason, selfiePath = selfiePath))
+            
+            // Sync to Supabase if repository is available
+            repository?.syncAttendanceToSupabase(employeeId, "OUT", employeeTimeMillis, selfiePath)
+            
             if (isOfficeWork && !workReason.isNullOrBlank()) saveNewReason(workReason)
             _isPunchedIn.value = false
             loadDashboardData(employeeId)
@@ -297,7 +307,12 @@ class AttendanceViewModelV2(
         return totalHours
     }
 
-    class Factory(val ad: AttendanceDao, val wd: WorkReasonDao, val ed: EmployeeDao) : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = AttendanceViewModelV2(ad, wd, ed) as T
+    class Factory(
+        val ad: AttendanceDao, 
+        val wd: WorkReasonDao, 
+        val ed: EmployeeDao,
+        val repo: AttendanceRepository? = null
+    ) : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = AttendanceViewModelV2(ad, wd, ed, repo) as T
     }
 }

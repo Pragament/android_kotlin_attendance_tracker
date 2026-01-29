@@ -63,11 +63,21 @@ fun MainAttendanceScreen(
 
     val settingsManager = remember { SettingsManager(context) }
 
+    // Create repository with Supabase client from parent viewModel
+    val repository = remember(viewModel.supabaseClient) {
+        com.technikh.employeeattendancetracking.repository.AttendanceRepository(
+            database.attendanceDao(),
+            database.workReasonDao(),
+            viewModel.supabaseClient
+        )
+    }
+
     val viewModel: AttendanceViewModelV2 = viewModel(
         factory = AttendanceViewModelV2.Factory(
             database.attendanceDao(),
             database.workReasonDao(),
-            database.employeeDao()
+            database.employeeDao(),
+            repository  // Pass repository for Supabase sync
         )
     )
 
@@ -228,7 +238,7 @@ fun MainAttendanceScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isOnline) "● Online" else "● Offline",
+                    text = if (isOnline) "● Online" else "● $connectionStatus",
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
