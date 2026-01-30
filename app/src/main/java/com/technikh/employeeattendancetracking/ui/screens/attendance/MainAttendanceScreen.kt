@@ -10,8 +10,10 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -32,6 +34,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 import com.technikh.employeeattendancetracking.data.database.AppDatabase
 import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModelV2
+import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModel
 import com.technikh.employeeattendancetracking.utils.rememberBiometricPrompt
 import com.technikh.employeeattendancetracking.utils.launchBiometric
 import com.technikh.employeeattendancetracking.utils.takePhoto
@@ -45,6 +48,7 @@ import java.util.Calendar
 @Composable
 fun MainAttendanceScreen(
     employeeId: String,
+    viewModel: AttendanceViewModel,
     onNavigateToDashboard: () -> Unit,
     onNavigateHome: () -> Unit
 ) {
@@ -52,20 +56,46 @@ fun MainAttendanceScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val database = AppDatabase.getDatabase(context)
 
+    // Connection status from the main ViewModel
+    val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
+
 
     val settingsManager = remember { SettingsManager(context) }
 
-    val viewModel: AttendanceViewModelV2 = viewModel(
+    // Create repository without Supabase client initially
+    val repository = remember {
+        com.technikh.employeeattendancetracking.repository.AttendanceRepository(
+            database.attendanceDao(),
+            database.workReasonDao(),
+            null  // Will be updated by LaunchedEffect
+        )
+    }
+    
+    // Keep repository's supabase client in sync with parent viewModel
+    LaunchedEffect(viewModel.supabaseClient) {
+        repository.supabase = viewModel.supabaseClient
+        android.util.Log.d("MainAttendance", "Updated repository.supabase = ${viewModel.supabaseClient != null}")
+    }
+
+    val viewModelV2: AttendanceViewModelV2 = viewModel(
         factory = AttendanceViewModelV2.Factory(
             database.attendanceDao(),
             database.workReasonDao(),
-            database.employeeDao()
+            database.employeeDao(),
+            repository  // Pass repository for Supabase sync
         )
     )
+    
+    // CRITICAL: Update the ViewModel's repository field in case it was cached from another screen
+    LaunchedEffect(repository) {
+        viewModelV2.repository = repository
+        android.util.Log.d("MainAttendance", "Set viewModelV2.repository = ${repository != null}")
+    }
 
     BackHandler { onNavigateHome() }
 
-    val lastRecord by viewModel.getLiveStatus(employeeId).collectAsState(initial = null)
+    val lastRecord by viewModelV2.getLiveStatus(employeeId).collectAsState(initial = null)
 
 
     val isPunchedIn = lastRecord?.punchType == "IN"
@@ -128,7 +158,7 @@ fun MainAttendanceScreen(
                     if (pendingAction == "OUT") {
                         showPunchOutDialog = true
                     } else {
-                        viewModel.punchIn(
+                        viewModelV2.punchIn(
                             employeeId = employeeId,
                             systemTimeMillis = System.currentTimeMillis(),
                             employeeTimeMillis = selectedTimeMillis,
@@ -204,6 +234,26 @@ fun MainAttendanceScreen(
                 AndroidView(
                     factory = { ctx -> PreviewView(ctx).apply { controller = cameraController } },
                     modifier = Modifier.size(size).alpha(alpha).align(Alignment.TopCenter)
+                )
+            }
+
+            // --- CONNECTION STATUS INDICATOR ---
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .background(
+                        color = if (isOnline) Color(0xFF4CAF50) else Color(0xFFE53935),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isOnline) "● Online" else "● $connectionStatus",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
@@ -311,7 +361,7 @@ fun MainAttendanceScreen(
                 PunchOutReasonDialog(
                     onDismiss = { showPunchOutDialog = false },
                     onConfirm = { reason, isOffice, workReason ->
-                        viewModel.punchOut(employeeId, reason, isOffice, workReason, systemTimeMillis = System.currentTimeMillis(), employeeTimeMillis = selectedTimeMillis, tempSelfiePath)
+                        viewModelV2.punchOut(employeeId, reason, isOffice, workReason, systemTimeMillis = System.currentTimeMillis(), employeeTimeMillis = selectedTimeMillis, tempSelfiePath)
                         showPunchOutDialog = false
                         Toast.makeText(context, "Punch Out Successful!", Toast.LENGTH_SHORT).show()
                         onNavigateHome()

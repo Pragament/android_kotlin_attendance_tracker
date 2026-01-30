@@ -9,12 +9,21 @@ import java.text.SimpleDateFormat
 import java.util.*
 import com.technikh.employeeattendancetracking.data.database.daos.*
 import com.technikh.employeeattendancetracking.data.database.entities.*
+import com.technikh.employeeattendancetracking.repository.AttendanceRepository
 
 class AttendanceViewModelV2(
     private val attendanceDao: AttendanceDao,
     private val workReasonDao: WorkReasonDao,
-    private val employeeDao: EmployeeDao
+    private val employeeDao: EmployeeDao,
+    initialRepository: AttendanceRepository? = null  // Optional for Supabase sync - can be updated later
 ) : ViewModel() {
+
+    // Mutable repository field - can be set after construction
+    var repository: AttendanceRepository? = initialRepository
+        set(value) {
+            field = value
+            android.util.Log.d("V2-VM", "Repository updated: ${value != null}")
+        }
 
     // --- HOME SCREEN FEATURES ---
 
@@ -234,12 +243,24 @@ class AttendanceViewModelV2(
     }
 
     fun punchIn(employeeId: String, selfiePath: String?, systemTimeMillis: Long, employeeTimeMillis: Long) {
+        android.util.Log.d("V2-PUNCH", "punchIn called for $employeeId, selfiePath=$selfiePath")
         viewModelScope.launch {
             val normalizedSystemTime = normalizeToMinute(systemTimeMillis)
             val normalizedEmployeeTime = normalizeToMinute(employeeTimeMillis)
             val isManuallyEdited = normalizedSystemTime != normalizedEmployeeTime
 
             attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "IN", systemTimeMillis = systemTimeMillis, employeeTimeMillis = employeeTimeMillis, isManuallyEdited = isManuallyEdited, selfiePath = selfiePath))
+            android.util.Log.d("V2-PUNCH", "Local DB insert done. Repository is null: ${repository == null}")
+            
+            // Sync to Supabase if repository is available
+            repository?.let { repo ->
+                android.util.Log.d("V2-PUNCH", "Calling syncAttendanceToSupabase...")
+                repo.syncAttendanceToSupabase(employeeId, "IN", employeeTimeMillis, selfiePath)
+                android.util.Log.d("V2-PUNCH", "syncAttendanceToSupabase completed")
+            } ?: run {
+                android.util.Log.w("V2-PUNCH", "Repository is NULL - cannot sync to Supabase!")
+            }
+            
             _isPunchedIn.value = true
             loadDashboardData(employeeId)
         }
@@ -252,6 +273,10 @@ class AttendanceViewModelV2(
             val isManuallyEdited = normalizedSystemTime != normalizedEmployeeTime
 
             attendanceDao.insert(AttendanceRecord(employeeId = employeeId, punchType = "OUT", systemTimeMillis = systemTimeMillis, employeeTimeMillis = employeeTimeMillis, isManuallyEdited = isManuallyEdited, reason = reason, isOfficeWork = isOfficeWork, workReason = workReason, selfiePath = selfiePath))
+            
+            // Sync to Supabase if repository is available
+            repository?.syncAttendanceToSupabase(employeeId, "OUT", employeeTimeMillis, selfiePath)
+            
             if (isOfficeWork && !workReason.isNullOrBlank()) saveNewReason(workReason)
             _isPunchedIn.value = false
             loadDashboardData(employeeId)
@@ -297,7 +322,12 @@ class AttendanceViewModelV2(
         return totalHours
     }
 
-    class Factory(val ad: AttendanceDao, val wd: WorkReasonDao, val ed: EmployeeDao) : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = AttendanceViewModelV2(ad, wd, ed) as T
+    class Factory(
+        val ad: AttendanceDao, 
+        val wd: WorkReasonDao, 
+        val ed: EmployeeDao,
+        val repo: AttendanceRepository? = null
+    ) : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = AttendanceViewModelV2(ad, wd, ed, repo) as T
     }
 }
