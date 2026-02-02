@@ -9,6 +9,7 @@ import com.technikh.employeeattendancetracking.data.database.entities.SupabaseAt
 import com.technikh.employeeattendancetracking.data.database.entities.PunchOutUpdate
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.flow.Flow
 import java.io.File
@@ -40,15 +41,8 @@ class AttendanceRepository(
             Log.d("REPO", "Synced to Laptop Success!")
         } catch (e: Exception) {
             Log.e("REPO", "Offline mode: Could not sync to laptop. Error: ${e.message}")
-            // This is fine. We saved it locally (Step A), so we are safe.
         }
     }
-
-    /**
-     * Upload selfie image to Supabase Storage bucket 'selfies'
-     * @param filePath Local file path of the selfie image
-     * @return Public URL of the uploaded image, or null if upload fails
-     */
     suspend fun uploadImageToSupabase(filePath: String): String? {
         val client = supabase ?: return null
         
@@ -75,11 +69,6 @@ class AttendanceRepository(
             null
         }
     }
-    /**
-     * Sync punch record to Supabase with proper mapping to existing table structure.
-     * - For PUNCH IN: Creates new row with employee_id, punch_in_time, and image_url
-     * - For PUNCH OUT: Updates existing row's punch_out_time (or creates new if none for today)
-     */
     suspend fun syncAttendanceToSupabase(
         employeeId: String,
         punchType: String,
@@ -96,9 +85,7 @@ class AttendanceRepository(
         Log.d("REPO", "Supabase client is available, proceeding with sync...")
 
         try {
-            // Format timestamp as ISO 8601 string for Supabase TEXT column
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
-            dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.getDefault())
             val timeString = dateFormat.format(Date(timestamp))
 
             // Upload image if available
@@ -130,13 +117,12 @@ class AttendanceRepository(
                     insertError.printStackTrace()
                 }
             } else {
-                // For punch out, update the most recent record that has punch_in but no punch_out
-                // Get today's date to find the matching record
-                val todayStart = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timestamp))
-                
+                Log.d("REPO", "Preparing PUNCH OUT update. ImageURL: $imageUrl")
+
                 // Create serializable update record for punch_out_time
                 val updateData = PunchOutUpdate(
                     punchOutTime = timeString,
+                    punchOutImageUrl = imageUrl,
                     isSynced = true
                 )
                 
@@ -144,11 +130,10 @@ class AttendanceRepository(
                     client.from("attendance").update(updateData) {
                         filter {
                             eq("employee_id", employeeId)
-                            ilike("punch_in_time", "$todayStart%")
-                            eq("punch_out_time", "")
+                            filter("punch_out_time", FilterOperator.IS, null)
                         }
                     }
-                    Log.d("REPO", "PUNCH OUT synced to Supabase for $employeeId")
+                    Log.d("REPO", "PUNCH OUT synced to Supabase for $employeeId. Payload: $updateData")
                 } catch (updateError: Exception) {
                     Log.e("REPO", "CRITICAL: PUNCH OUT Update Failed for $employeeId", updateError)
                     updateError.printStackTrace()
