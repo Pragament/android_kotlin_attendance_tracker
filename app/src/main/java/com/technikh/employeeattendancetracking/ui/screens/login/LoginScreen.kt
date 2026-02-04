@@ -165,8 +165,6 @@ fun LoginScreen(
             }
 
             Divider(thickness = 2.dp, color = Color.LightGray, modifier = Modifier.padding(vertical = 8.dp))
-
-            // --- TODAY'S TIMELINE ---
             // Added a small "Export Today" button here too for convenience
             Row(
                 modifier = Modifier

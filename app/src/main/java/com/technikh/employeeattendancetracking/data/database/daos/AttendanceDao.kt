@@ -17,10 +17,10 @@ interface AttendanceDao {
     @Query("SELECT * FROM attendance_records ORDER BY employeeTimeMillis DESC")
     suspend fun getAllRecordsList(): List<AttendanceRecord>
 
-    @Query("SELECT * FROM attendance_records WHERE employeeId = :empId ORDER BY employeeTimeMillis DESC LIMIT 1")
+    @Query("SELECT * FROM attendance_records WHERE employeeId = :empId ORDER BY id DESC LIMIT 1")
     fun getLastRecordFlow(empId: String): Flow<AttendanceRecord?>
 
-    @Query("SELECT * FROM attendance_records WHERE employeeId = :empId ORDER BY employeeTimeMillis DESC LIMIT 1")
+    @Query("SELECT * FROM attendance_records WHERE employeeId = :empId ORDER BY id DESC LIMIT 1")
     suspend fun getLastRecord(empId: String): AttendanceRecord?
 
     @Query("SELECT * FROM attendance_records WHERE employeeTimeMillis >= :startOfDay ORDER BY employeeTimeMillis DESC")

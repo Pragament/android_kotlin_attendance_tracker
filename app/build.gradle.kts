@@ -44,8 +44,8 @@ android {
     }
 
     composeOptions {
-        // This version MUST be 1.5.1 to match Kotlin 1.9.0
-        kotlinCompilerExtensionVersion = "1.5.1"
+        // This version MUST be 1.5.14 to match Kotlin 1.9.24
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 }
 

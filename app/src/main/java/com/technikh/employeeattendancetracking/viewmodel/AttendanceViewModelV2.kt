@@ -17,17 +17,13 @@ class AttendanceViewModelV2(
     private val employeeDao: EmployeeDao,
     initialRepository: AttendanceRepository? = null  // Optional for Supabase sync - can be updated later
 ) : ViewModel() {
-
-    // Mutable repository field - can be set after construction
     var repository: AttendanceRepository? = initialRepository
         set(value) {
             field = value
             android.util.Log.d("V2-VM", "Repository updated: ${value != null}")
         }
 
-    // --- HOME SCREEN FEATURES ---
 
-    // Live Timeline (Bottom half of Home Screen)
     val todayTimeline = attendanceDao.getTodayAttendance(getStartOfDay())
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -42,8 +38,6 @@ class AttendanceViewModelV2(
     private val _currentEmployeeName = MutableStateFlow("")
     val currentEmployeeName = _currentEmployeeName.asStateFlow()
 
-
-    // --- REPORTING FEATURES (Individual) ---
 
     // 1. The Single Source of Truth for "Selected Time" (Used for both Day and Month views)
     private val _selectedDate = MutableStateFlow(Calendar.getInstance())
@@ -95,8 +89,6 @@ class AttendanceViewModelV2(
     val monthlyReport = _monthlyReport.asStateFlow()
 
     private var activeEmployeeId: String? = null
-
-    // --- NEW: GLOBAL REPORTS (Multi-Select Filter) ---
 
     // 1. All records in the entire database (loaded when Global Screen opens)
     private val _globalRecords = MutableStateFlow<List<AttendanceRecord>>(emptyList())
