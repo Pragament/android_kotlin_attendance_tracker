@@ -2,8 +2,11 @@ package com.technikh.employeeattendancetracking.ui.screens.settings
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -11,9 +14,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.technikh.employeeattendancetracking.data.database.AppPreferences
+import com.technikh.employeeattendancetracking.data.network.NameserverApi
 import com.technikh.employeeattendancetracking.utils.SettingsManager
 import com.technikh.employeeattendancetracking.viewmodel.AttendanceViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -34,6 +40,13 @@ fun SettingsScreen(
 
     var ipInput by remember { mutableStateOf("") }
     var keyInput by remember { mutableStateOf("") }
+
+    // --- Fetch Config Dialog State ---
+    var showFetchDialog by remember { mutableStateOf(false) }
+    var fetchUuid by remember { mutableStateOf("") }
+    var fetchPin by remember { mutableStateOf("") }
+    var isFetching by remember { mutableStateOf(false) }
+    var fetchErrorMsg by remember { mutableStateOf("") }
 
     LaunchedEffect(supabaseConfig) {
         if (ipInput.isBlank()) ipInput = supabaseConfig.first
@@ -78,7 +91,10 @@ fun SettingsScreen(
         var maxEmp by remember { mutableStateOf(settingsManager.maxHomeEmployees.toString()) }
         var newAdminPass by remember { mutableStateOf("") }
 
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+        ) {
             Text("Settings", style = MaterialTheme.typography.headlineLarge)
             Spacer(Modifier.height(16.dp))
 
@@ -132,6 +148,24 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
+            // --- FETCH CONFIG BUTTON ---
+            OutlinedButton(
+                onClick = {
+                    fetchUuid = ""
+                    fetchPin = ""
+                    fetchErrorMsg = ""
+                    showFetchDialog = true
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color(0xFF1565C0)
+                )
+            ) {
+                Text("🔑 Fetch Config from Server")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             OutlinedTextField(
                 value = ipInput,
                 onValueChange = { ipInput = it },
@@ -160,7 +194,7 @@ fun SettingsScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)) // Green to distinguish
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
             ) {
                 Text("Save Server Config")
             }
@@ -182,5 +216,131 @@ fun SettingsScreen(
             Spacer(Modifier.height(20.dp))
             Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Close Settings") }
         }
+    }
+
+    // --- FETCH CONFIG DIALOG ---
+    if (showFetchDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isFetching) showFetchDialog = false
+            },
+            title = { Text("Fetch Supabase Config") },
+            text = {
+                Column {
+                    Text(
+                        "Enter the UUID and PIN from your nameserver config.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Create config at: pragament.github.io/html_intranet_nameserver",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = fetchUuid,
+                        onValueChange = {
+                            fetchUuid = it
+                            fetchErrorMsg = ""
+                        },
+                        label = { Text("UUID *") },
+                        placeholder = { Text("e.g. g3kfI3sfWHB8Hbe0cGlu") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        isError = fetchErrorMsg.isNotEmpty() && fetchUuid.isBlank(),
+                        enabled = !isFetching
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = fetchPin,
+                        onValueChange = {
+                            fetchPin = it
+                            fetchErrorMsg = ""
+                        },
+                        label = { Text("PIN (Optional)") },
+                        placeholder = { Text("e.g. 123456") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        enabled = !isFetching
+                    )
+
+                    if (fetchErrorMsg.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            fetchErrorMsg,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (isFetching) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Fetching config...", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (fetchUuid.isBlank()) {
+                            fetchErrorMsg = "UUID is required"
+                            return@Button
+                        }
+                        isFetching = true
+                        fetchErrorMsg = ""
+                        scope.launch {
+                            val response = withContext(Dispatchers.IO) {
+                                NameserverApi.fetchConfig(fetchUuid.trim(), fetchPin.trim())
+                            }
+
+                            isFetching = false
+
+                            if (response.success && response.config != null) {
+                                val url = response.config.resolvedUrl()
+                                val anonKey = response.config.resolvedKey()
+
+                                if (url.isNotBlank()) ipInput = url
+                                if (anonKey.isNotBlank()) keyInput = anonKey
+
+                                // Auto-save the config
+                                prefs.saveSupabaseConfig(
+                                    if (url.isNotBlank()) url else ipInput,
+                                    if (anonKey.isNotBlank()) anonKey else keyInput
+                                )
+
+                                showFetchDialog = false
+                                Toast.makeText(context, "✅ Config fetched and saved!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                fetchErrorMsg = response.error ?: response.message ?: "Failed to fetch config"
+                            }
+                        }
+                    },
+                    enabled = !isFetching
+                ) {
+                    Text("Fetch")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showFetchDialog = false },
+                    enabled = !isFetching
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
